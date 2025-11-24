@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Integrated Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.3/lib/p5.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Libre Franklin', sans-serif;
+            color: #fff;
+        }
+        #p5-canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        /* === 筛选器容器居中并排 === */
+        #controls-container {
+            position: absolute;
+            top: 20px; 
+            left: 50%;
+            transform: translateX(-50%); 
+            
+            display: flex; 
+            flex-direction: row; 
+            gap: 20px; 
+            
+            z-index: 10;
+        }
+        
+        .filter-wrapper {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 10px 15px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 150px;
+        }
+        .filter-wrapper label {
+            font-size: 12px;
+            /* 标签颜色 #C8C25D */
+            color: #C8C25D; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+        }
+        /* 样式现在直接作用于手动添加的 select 元素 */
+        .filter-wrapper select { 
+            background: #222;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            height: 35px;
+            width: 100%;
+            margin-top: 5px;
+            outline: none; 
+            /* 强制显示和渲染 */
+            -webkit-appearance: menulist-button;
+            appearance: menulist-button;
+        }
+    </style>
+</head>
+<body>
+    <div id="p5-canvas-container"></div>
+    
+    <div id="controls-container">
+        <div id="countrySel_wrapper" class="filter-wrapper">
+            <label>Country</label>
+            <select id="countrySelect"></select> 
+        </div>
+        <div id="regionSel_wrapper" class="filter-wrapper">
+            <label>REGION</label> 
+            <select id="regionSelect"></select>
+        </div>
+    </div>
+
+ <script src="sketch.js"></script>
+</body>
+</html>
