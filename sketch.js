@@ -18,16 +18,16 @@ let particlesEmitted = false;
 
 let countrySelect; 
 let regionSelect; 
-let currentSelectedCountry = "N/A"; 
-let currentSelectedRegion = "N/A";  
+let currentSelectedCountry = "UNKNOWN"; 
+let currentSelectedRegion = "UNKNOWN";  
 
 // === 日期筛选变量 ===
 let yearSelect; 
 let monthSelect; 
 let daySelect; 
-let currentSelectedYear = "N/A"; 
-let currentSelectedMonth = "N/A"; 
-let currentSelectedDay = "N/A";   
+let currentSelectedYear = "UNKNOWN"; 
+let currentSelectedMonth = "UNKNOWN"; 
+let currentSelectedDay = "UNKNOWN";   
 
 let animationFrame = 0;
 const BASE_SCALE_DURATION = 30; 
@@ -39,8 +39,8 @@ const TYPEWRITER_SPEED = 2;
 const FIXED_PARTICLE_COUNT = 150; 
 
 let shakeMagnitude = 0;
-const maxShakeMagnitude = 45; 
-const shakeDecayRate = 0.985; 
+const maxShakeMagnitude = 20; 
+const shakeDecayRate = 0.8; 
 
 let currentRipplesCount = 0; 
 const RIPPLE_SPREAD_RATE = 0.8; 
@@ -142,12 +142,12 @@ function setup() {
         for (let r = 0; r < table.getRowCount(); r++) {
             let dataRow = table.getRow(r);
             
-            let country_str = dataRow.get('country') || 'N/A';
-            let region_str = (dataRow.get('region') || 'N/A').trim();
+            let country_str = dataRow.get('country') || 'UNKNOWN';
+            let region_str = (dataRow.get('region') || 'UNKNOWN').trim();
             
             let avgYield_str = dataRow.get('average_yield') || '0';
             let depth_str = dataRow.get('depth') || '0'; 
-            let id_no_str = dataRow.get('id_no') || 'ID_N/A'; 
+            let id_no_str = dataRow.get('id_no') || 'ID_UNKNOWN'; 
 
             let avgYield_val = parseFloat(avgYield_str) || 0; 
             let baseYieldForLog = avgYield_val; 
@@ -168,12 +168,12 @@ function setup() {
             
             if (isNaN(latitude) || isNaN(longitude)) continue; 
 
-            let locationName = dataRow.get('name') || dataRow.get('region') || 'N/A';
+            let locationName = dataRow.get('name') || dataRow.get('region') || 'UNKNOWN';
             
-            let dateStr = dataRow.get('date_DMY') || 'N/A'; 
+            let dateStr = dataRow.get('date_DMY') || 'UNKNOWN'; 
             
-            let year = 'N/A', month = 'N/A', day = 'N/A';
-            if (dateStr !== 'N/A') {
+            let year = 'UNKNOWN', month = 'UNKNOWN', day = 'UNKNOWN';
+            if (dateStr !== 'UNKNOWN') {
                 const parts = dateStr.split('/'); 
                 if (parts.length === 3) {
                     day = parts[0];   
@@ -182,15 +182,14 @@ function setup() {
                 }
             }
             
-            let isoDateStr = 'N/A'; 
+            let isoDateStr = 'UNKNOWN'; 
             let dateObj = null;
 
             let uniqueRegionName;
-            if (region_str !== 'N/A') {
-                // 使用 country + region + id_no 来创建唯一的地区名，以应对不同国家有相同地区名的情况
-                uniqueRegionName = `${region_str} (${id_no_str})`; 
+            if (region_str !== 'UNKNOWN') {
+                uniqueRegionName = `${region_str} (${id_no_str})`;
             } else {
-                uniqueRegionName = 'N/A';
+                uniqueRegionName = 'UNKNOWN';
             }
 
             data.push({
@@ -210,7 +209,7 @@ function setup() {
                 raw_depth_str: depth_str, 
                 depth_val: depth_val, 
                 
-                type: dataRow.get('type') || 'N/A',
+                type: dataRow.get('type') || 'UNKNOWN',
                 lat: latitude,
                 lon: longitude,
                 name: locationName,
@@ -236,18 +235,15 @@ function setup() {
          });
     }
 
+    // [保持不取整] 深度数据范围修改：直接使用绝对最大深度值作为 maxDepth
     minDepth = 0; 
-    maxDepth = 1000; 
-    
-    if (absoluteMaxDepth > 1000) {
-        maxDepth = ceil(absoluteMaxDepth / 100) * 100; 
-    }
+    maxDepth = absoluteMaxDepth; 
     
     if (minDepth === maxDepth) {
-         maxDepth = minDepth + 100;
+         maxDepth = minDepth + 100; // 确保非零范围
     }
 
-    countries = [...Array.from(countrySet).filter(c => c !== 'N/A').sort()];
+    countries = [...Array.from(countrySet).filter(c => c !== 'UNKNOWN').sort()];
     
     setupP5Filters();
     calculateMapDimensions();
@@ -259,7 +255,6 @@ function draw() {
     textFont('Libre Franklin'); 
     
     background(0);
-    drawStarryBackground();
     
     let sortedData = filterData();
     
@@ -275,10 +270,11 @@ function draw() {
         totalYieldSum = sortedData.reduce((sum, d) => sum + Math.pow(10, d.logYield) - 1, 0);
     }
     
-    let maxDataPoint = sortedData.length > 0 ? filterData()[filterData().length - 1] : null;
+    // [重要修正] 获取当前要显示的数据点：使用 selectedMapPoint (即当前筛选的那个点)
+    let currentDataPoint = selectedMapPoint || sortedData[sortedData.length - 1] || null;
 
-    if (isDataVisible && maxDataPoint) {
-        let t = map(maxDataPoint.depth_val, minDepth, maxDepth, 0, 1); 
+    if (isDataVisible && currentDataPoint) {
+        let t = map(currentDataPoint.depth_val, minDepth, maxDepth, 0, 1); 
         t = constrain(t, 0, 1);
         currentRingColor = getColorForDepth(t); 
     } else {
@@ -336,18 +332,18 @@ function draw() {
             animationFrame++;
         }
         
-        if (ringsFullyDrawn && maxDataPoint) {
+        if (ringsFullyDrawn && currentDataPoint) {
             dataDisplayFrame++;
         }
     }
 
     pop(); 
 
-    if (isDataVisible && ringsFullyDrawn && maxDataPoint) {
-        drawDataDetail(maxDataPoint); 
+    if (isDataVisible && ringsFullyDrawn && currentDataPoint) {
+        drawDataDetail(currentDataPoint); 
     }
 
-    drawDepthScale();
+    drawDepthScale(currentDataPoint);
 
     if (isDataVisible || particles.length > 0) {
         for (let i = particles.length - 1; i >= 0; i--) {
@@ -366,7 +362,7 @@ function draw() {
 }
 
 // =================================================================
-// === 绘制辅助函数 (与之前版本相同，略) ===
+// === 绘制辅助函数 ===
 // =================================================================
 
 function drawSingleSoftRing(outerRadius, ringColor, radiusOffset) {
@@ -423,19 +419,6 @@ function drawSingleSoftRing(outerRadius, ringColor, radiusOffset) {
     }
 
     pop();
-}
-
-function drawStarryBackground() {
-    randomSeed(99); 
-    for (let i = 0; i < 300; i++) {
-        let x = random(width);
-        let y = random(height);
-        let starSize = random(1, 3);
-        let alpha = random(100, 255);
-        fill(255, 255, 255, alpha);
-        noStroke();
-        ellipse(x, y, starSize, starSize);
-    }
 }
 
 function drawDarkCoreGlow() {
@@ -542,7 +525,7 @@ function drawDataDetail(dataPoint) {
     const roughHeight = 550; 
     let startY = centerY - (roughHeight / 2);
     
-    translate(150, startY); 
+    translate(150, startY+100); 
     
     const LINE_SPACING_BIG = 40; 
     const LINE_SPACING_SMALL = 20; 
@@ -587,14 +570,11 @@ function drawDataDetail(dataPoint) {
     }
 
     const MAX_YIELD_SIZE = 48; 
-    
-    drawItem('FORCE_1', displayYield1, 16, MAX_YIELD_SIZE, yieldColor); 
-    drawItem('FORCE_U', displayYieldU, 16, MAX_YIELD_SIZE, yieldColor); 
 
-    let displayDepthM = dataPoint.depth_val.toFixed(1); 
-    if (dataPoint.depth_val % 1 === 0) {
-         displayDepthM = dataPoint.depth_val.toFixed(0); 
-    }
+    drawItem('FORCE_U (kt)', displayYieldU, 16, MAX_YIELD_SIZE, yieldColor); 
+
+    // [保持] 深度数据显示为整数，不保留浮点数
+    let displayDepthM = floor(dataPoint.depth_val).toFixed(0); 
     
     const typewriterData = [
         { label: 'COUNTRY', value: dataPoint.country },     
@@ -607,23 +587,16 @@ function drawDataDetail(dataPoint) {
     const VALUE_SIZE_NORMAL = 26; 
     const LABEL_SIZE_NORMAL = 12; 
     
+    // 移除打字机效果，只保留淡入效果
     let detailAlpha = map(dataDisplayFrame, 0, MAX_COUNTER_FRAMES, 50, 255);
     detailAlpha = constrain(detailAlpha, 50, 255);
 
-    let charIndex = floor(dataDisplayFrame / TYPEWRITER_SPEED);
-    let totalChars = 0;
-    
+    // 移除 charIndex 和 totalChars 逻辑，直接显示完整文本
     for (let i = 0; i < typewriterData.length; i++) {
         let item = typewriterData[i];
         let fullText = item.value;
         let labelText = item.label;
         
-        let startCharIndex = totalChars;
-        totalChars += fullText.length;
-        
-        let charsToShow = constrain(charIndex - startCharIndex, 0, fullText.length);
-        let displayedValue = fullText.substring(0, charsToShow);
-
         fill(200, detailAlpha); 
         textSize(LABEL_SIZE_NORMAL);
         text(labelText, 0, y);
@@ -631,7 +604,7 @@ function drawDataDetail(dataPoint) {
 
         fill(255, detailAlpha); 
         textSize(VALUE_SIZE_NORMAL);
-        text(displayedValue, 0, y);
+        text(fullText, 0, y); // 直接显示完整的文本
         y += LINE_SPACING_BIG; 
     }
     
@@ -656,7 +629,7 @@ function getColorForDepth(normalizedDepth) {
     return lerpColor(c1, c2, frac);
 }
 
-function drawDepthScale() {
+function drawDepthScale(currentDataPoint) {
     push();
     const scaleMargin = 40;
     const scaleWidth = 12; 
@@ -701,11 +674,11 @@ function drawDepthScale() {
     textAlign(CENTER, BOTTOM);
     text('DEPTH (m)', scaleX, scaleYStart - 10); 
 
-    const majorTicks = 5; 
+    // [修正] 仅绘制 0%, 50%, 100% 的刻度，并直接使用 floor(currentDepth) 作为标签
+    const ticksToDraw = [0, 0.5, 1]; 
     const labelOffset = 15; 
 
-    for (let i = 0; i <= majorTicks; i++) {
-        let normalizedDepth = i / majorTicks; 
+    for (let normalizedDepth of ticksToDraw) {
         
         let currentDepth = lerp(minDepth, maxDepth, normalizedDepth); 
         
@@ -720,16 +693,15 @@ function drawDepthScale() {
         textSize(12); 
         textAlign(RIGHT, CENTER);
         
-        let displayDepth = (currentDepth % 1 === 0) ? currentDepth.toFixed(0) : currentDepth.toFixed(1);
+        // 深度标签也改为整数显示 (floor(maxDepth) 来保证一致性)
+        let displayDepth = floor(currentDepth).toFixed(0);
         
         text(displayDepth, scaleX - scaleWidth / 2 - labelOffset, y);
     }
     
-    let maxDataPoint = filterData().length > 0 ? filterData()[filterData().length - 1] : null;
-
-    if (maxDataPoint && isDataVisible) {
+    if (currentDataPoint && isDataVisible) {
         
-        let dataDepthVal = maxDataPoint.depth_val; 
+        let dataDepthVal = currentDataPoint.depth_val; 
         
         let t = map(dataDepthVal, minDepth, maxDepth, 0, 1); 
         t = constrain(t, 0, 1);
@@ -754,9 +726,10 @@ function drawDepthScale() {
         textSize(12); 
         textAlign(RIGHT, CENTER);
         
-        let displayMaxDepth = (dataDepthVal % 1 === 0) ? dataDepthVal.toFixed(0) : dataDepthVal.toFixed(1);
+        // 深度标签也改为整数显示
+        let displayMaxDepth = floor(dataDepthVal).toFixed(0);
         
-        text(`MAX DEPTH: ${displayMaxDepth}`, scaleX - 260, depthY); 
+        text(`DEPTH: ${displayMaxDepth}`, scaleX - 260, depthY); 
     }
 
     pop();
@@ -846,12 +819,12 @@ function emitParticles(ringColor) {
 
 function filterData() {
     let filtered = data.filter(d => {
-        let countryMatch = currentSelectedCountry === "N/A" || d.country === currentSelectedCountry;
-        let regionMatch = currentSelectedRegion === "N/A" || d.uniqueRegionName === currentSelectedRegion;
+        let countryMatch = currentSelectedCountry === "UNKNOWN" || d.country === currentSelectedCountry;
+        let regionMatch = currentSelectedRegion === "UNKNOWN" || d.uniqueRegionName === currentSelectedRegion;
         
-        let yearMatch = currentSelectedYear === "N/A" || d.year === currentSelectedYear;
-        let monthMatch = currentSelectedMonth === "N/A" || d.month === currentSelectedMonth;
-        let dayMatch = currentSelectedDay === "N/A" || d.day === currentSelectedDay;
+        let yearMatch = currentSelectedYear === "UNKNOWN" || d.year === currentSelectedYear;
+        let monthMatch = currentSelectedMonth === "UNKNOWN" || d.month === currentSelectedMonth;
+        let dayMatch = currentSelectedDay === "UNKNOWN" || d.day === currentSelectedDay;
         
         return countryMatch && regionMatch && yearMatch && monthMatch && dayMatch;
     });
@@ -871,12 +844,12 @@ function setupP5Filters() {
 
     // --- 国家选择器初始化 ---
     countrySelect.innerHTML = '';
-    countrySelect.add(new Option("N/A (All)", "N/A")); 
+    countrySelect.add(new Option("UNKNOWN (All)", "UNKNOWN")); 
     
-    let sortedCountries = countries.filter(c => c !== 'N/A').sort();
+    let sortedCountries = countries.filter(c => c !== 'UNKNOWN').sort();
     sortedCountries.forEach(c => countrySelect.add(new Option(c, c))); 
-    countrySelect.value = "N/A";
-    currentSelectedCountry = "N/A";
+    countrySelect.value = "UNKNOWN";
+    currentSelectedCountry = "UNKNOWN";
 
     // --- 事件监听 ---
     countrySelect.addEventListener('change', countryChanged);
@@ -886,7 +859,7 @@ function setupP5Filters() {
     monthSelect.addEventListener('change', monthChanged);
     daySelect.addEventListener('change', dayChanged);
 
-    // 初始设置：不自动选择，但更新选项
+    // 初始设置：不自动选择
     updateRegionOptions(currentSelectedCountry, false);
     updateYearOptions(false);
     
@@ -900,50 +873,39 @@ function setupP5Filters() {
 // === 年月日级联更新函数 ===
 // =================================================================
 
-/**
- * 根据当前选中的国家/地区，获取用于日期筛选的数据子集
- * * @returns {Array<Object>} 过滤后的数据
- */
 function getDataForDateFiltering() {
-    // 日期选项的可用性只应受国家和地区的限制
+    // 过滤数据时，需要同时考虑已选中的国家/地区，以确保只显示有效的日期选项
     return data.filter(d => {
-        let countryMatch = currentSelectedCountry === "N/A" || d.country === currentSelectedCountry;
-        let regionMatch = currentSelectedRegion === "N/A" || d.uniqueRegionName === currentSelectedRegion;
+        let countryMatch = currentSelectedCountry === "UNKNOWN" || d.country === currentSelectedCountry;
+        let regionMatch = currentSelectedRegion === "UNKNOWN" || d.uniqueRegionName === currentSelectedRegion;
         return countryMatch && regionMatch;
     });
 }
 
 function updateYearOptions(autoSelect = false) {
-    // **注意：** 这里的 dataForFilter 只受国家/地区限制
-    const dataForFilter = getDataForDateFiltering(); 
-    let availableYears = new Set(["N/A"]);
+    const dataForFilter = getDataForDateFiltering();
+    let availableYears = new Set(["UNKNOWN"]);
 
     dataForFilter.forEach(d => {
-        if (d.year && d.year !== 'N/A') {
+        if (d.year && d.year !== 'UNKNOWN') {
             availableYears.add(d.year);
         }
     });
 
-    let sortedYears = Array.from(availableYears).filter(y => y !== 'N/A').sort().reverse();
+    let sortedYears = Array.from(availableYears).filter(y => y !== 'UNKNOWN').sort().reverse();
     
     yearSelect.innerHTML = '';
-    yearSelect.add(new Option("N/A", "N/A")); 
+    yearSelect.add(new Option("UNKNOWN", "UNKNOWN")); 
     sortedYears.forEach(y => yearSelect.add(new Option(y, y)));
 
     let finalSelection = currentSelectedYear;
     
-    // 【修正点】: 如果当前选定的年份在新选项中不可用，或强制自动选择 (autoSelect=true)
-    if (!availableYears.has(currentSelectedYear) || autoSelect) { 
-        if (sortedYears.length > 0 && autoSelect) {
-            // 自动选择第一个年份（最新的）
+    if (!availableYears.has(currentSelectedYear) || currentSelectedYear === "UNKNOWN") {
+        if (autoSelect && sortedYears.length > 0) {
             finalSelection = sortedYears[0]; 
         } else {
-            // 如果 autoSelect=false，或没有有效年份，退回到 "N/A"
-            finalSelection = "N/A";
+            finalSelection = "UNKNOWN";
         }
-    } else {
-        // 如果 currentSelectedYear 在可用选项中，保留它
-        finalSelection = currentSelectedYear; 
     }
     
     yearSelect.value = finalSelection;
@@ -953,17 +915,16 @@ function updateYearOptions(autoSelect = false) {
 }
 
 function updateMonthOptions(autoSelect = false) {
-    // **注意：** 这里的 dataForFilter 既受国家/地区限制，也受已选定年份的限制
     const dataForFilter = getDataForDateFiltering().filter(d => 
-        currentSelectedYear === "N/A" || d.year === currentSelectedYear
+        currentSelectedYear === "UNKNOWN" || d.year === currentSelectedYear
     );
     
-    let availableMonths = new Set(["N/A"]);
+    let availableMonths = new Set(["UNKNOWN"]);
     const monthNames = { "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr", "05": "May", "06": "Jun", 
                          "07": "Jul", "08": "Aug", "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec" };
 
     dataForFilter.forEach(d => {
-        if (d.month && d.month !== 'N/A') {
+        if (d.month && d.month !== 'UNKNOWN') {
             availableMonths.add(d.month);
         }
     });
@@ -971,22 +932,18 @@ function updateMonthOptions(autoSelect = false) {
     let sortedMonths = Array.from(availableMonths).filter(m => m !== 'N/A').sort();
     
     monthSelect.innerHTML = '';
-    monthSelect.add(new Option("N/A", "N/A")); 
+    monthSelect.add(new Option("UNKNOWN", "UNKNOWN")); 
     
     sortedMonths.forEach(m => monthSelect.add(new Option(monthNames[m] || m, m)));
     
     let finalSelection = currentSelectedMonth;
     
-    // 【修正点】: 如果当前选定的月份在新选项中不可用，或强制自动选择 (autoSelect=true)
-    if (!availableMonths.has(currentSelectedMonth) || autoSelect) {
-        if (sortedMonths.length > 0 && autoSelect) {
-            // 自动选择第一个月份 (最早的)
+    if (!availableMonths.has(currentSelectedMonth) || currentSelectedMonth === "UNKNOWN") {
+        if (autoSelect && sortedMonths.length > 0) {
             finalSelection = sortedMonths[0]; 
         } else {
-            finalSelection = "N/A";
+            finalSelection = "UNKNOWN";
         }
-    } else {
-        finalSelection = currentSelectedMonth;
     }
     
     monthSelect.value = finalSelection;
@@ -996,37 +953,33 @@ function updateMonthOptions(autoSelect = false) {
 }
 
 function updateDayOptions(autoSelect = false) {
-    // **注意：** 这里的 dataForFilter 既受国家/地区限制，也受已选定年份和月份的限制
     const dataForFilter = getDataForDateFiltering().filter(d => 
-        (currentSelectedYear === "N/A" || d.year === currentSelectedYear) &&
-        (currentSelectedMonth === "N/A" || d.month === currentSelectedMonth)
+        (currentSelectedYear === "UNKNOWN" || d.year === currentSelectedYear) &&
+        (currentSelectedMonth === "UNKNOWN" || d.month === currentSelectedMonth)
     );
     
-    let availableDays = new Set(["N/A"]);
+    let availableDays = new Set(["UNKNOWN"]);
 
     dataForFilter.forEach(d => {
-        if (d.day && d.day !== 'N/A') {
+        if (d.day && d.day !== 'UNKNOWN') {
             availableDays.add(d.day);
         }
     });
 
-    let sortedDays = Array.from(availableDays).filter(d => d !== 'N/A').sort((a, b) => parseInt(a) - parseInt(b));
+    let sortedDays = Array.from(availableDays).filter(d => d !== 'UNKNOWN').sort((a, b) => parseInt(a) - parseInt(b));
     
     daySelect.innerHTML = '';
-    daySelect.add(new Option("N/A", "N/A")); 
+    daySelect.add(new Option("UNKNOWN", "UNKNOWN")); 
     sortedDays.forEach(d => daySelect.add(new Option(d, d)));
 
     let finalSelection = currentSelectedDay;
     
-    // 【修正点】: 如果当前选定的日期在新选项中不可用，或强制自动选择 (autoSelect=true)
-    if (!availableDays.has(currentSelectedDay) || autoSelect) {
-        if (sortedDays.length > 0 && autoSelect) {
+    if (!availableDays.has(currentSelectedDay) || currentSelectedDay === "UNKNOWN") {
+        if (autoSelect && sortedDays.length > 0) {
             finalSelection = sortedDays[0]; 
         } else {
-            finalSelection = "N/A";
+            finalSelection = "UNKNOWN";
         }
-    } else {
-        finalSelection = currentSelectedDay;
     }
     
     daySelect.value = finalSelection;
@@ -1035,43 +988,39 @@ function updateDayOptions(autoSelect = false) {
 
 /**
  * 根据当前选定的日期，过滤国家选项并自动选择第一个有效国家。
- * 国家选项的可用性只受日期的限制。
- * * @param {boolean} autoSelect 是否自动选择第一个有效国家。
+ * @param {boolean} autoSelect - 是否自动选择第一个有效国家。
  */
 function updateCountryFromDate(autoSelect = false) {
     // 1. 根据当前日期筛选，找到所有匹配的国家
-    let availableCountries = new Set(["N/A"]);
+    let availableCountries = new Set(["UNKNOWN"]);
     
     data.forEach(d => {
-        let yearMatch = currentSelectedYear === "N/A" || d.year === currentSelectedYear;
-        let monthMatch = currentSelectedMonth === "N/A" || d.month === currentSelectedMonth;
-        let dayMatch = currentSelectedDay === "N/A" || d.day === currentSelectedDay;
+        let yearMatch = currentSelectedYear === "UNKNOWN" || d.year === currentSelectedYear;
+        let monthMatch = currentSelectedMonth === "UNKNOWN" || d.month === currentSelectedMonth;
+        let dayMatch = currentSelectedDay === "UNKNOWN" || d.day === currentSelectedDay;
         
-        if (yearMatch && monthMatch && dayMatch && d.country !== 'N/A') {
+        if (yearMatch && monthMatch && dayMatch && d.country !== 'UNKNOWN') {
             availableCountries.add(d.country);
         }
     });
 
-    let sortedCountries = Array.from(availableCountries).filter(c => c !== 'N/A').sort();
+    let sortedCountries = Array.from(availableCountries).filter(c => c !== 'UNKNOWN').sort();
     
     // 2. 重新填充国家下拉菜单（避免显示不存在的选项）
     countrySelect.innerHTML = '';
-    countrySelect.add(new Option("N/A (All)", "N/A")); 
+    countrySelect.add(new Option("UNKNOWN (All)", "UNKNOWN")); 
     sortedCountries.forEach(c => countrySelect.add(new Option(c, c)));
     
     // 3. 自动选择逻辑
     let finalSelection = currentSelectedCountry;
     let isCurrentCountryValid = availableCountries.has(currentSelectedCountry);
 
-    // 【修正点】: 如果当前国家无效，或者需要自动选择
-    if (!isCurrentCountryValid || autoSelect) { 
-        if (sortedCountries.length > 0 && autoSelect) { // 仅在 autoSelect=true 且有数据时自动选择
+    if (!isCurrentCountryValid || (autoSelect && currentSelectedCountry === "UNKNOWN")) {
+        if (sortedCountries.length > 0 && autoSelect) {
             finalSelection = sortedCountries[0]; 
         } else {
-            finalSelection = "N/A";
+            finalSelection = "UNKNOWN";
         }
-    } else {
-        finalSelection = currentSelectedCountry;
     }
     
     countrySelect.value = finalSelection;
@@ -1080,41 +1029,37 @@ function updateCountryFromDate(autoSelect = false) {
 
 /**
  * 更新地区选项。同时受国家和日期筛选器的限制。
- * * @param {string} selectedCountry 当前选定的国家
- * @param {boolean} autoSelect 是否自动选择第一个有效地区
  */
 function updateRegionOptions(selectedCountry, autoSelect = false) {
     regionSelect.innerHTML = '';
-    regionSelect.add(new Option("N/A (All)", "N/A")); 
+    regionSelect.add(new Option("UNKNOWN (All)", "UNKNOWN")); 
     
     let uniqueRegionNames = new Set();
     
-    // 筛选数据：必须匹配国家 AND 日期
+    // 筛选数据同时考虑国家和日期
     data.filter(d => 
         (d.country === selectedCountry) &&
-        (currentSelectedYear === "N/A" || d.year === currentSelectedYear) &&
-        (currentSelectedMonth === "N/A" || d.month === currentSelectedMonth) &&
-        (currentSelectedDay === "N/A" || d.day === currentSelectedDay)
+        (currentSelectedYear === "UNKNOWN" || d.year === currentSelectedYear) &&
+        (currentSelectedMonth === "UNKNOWN" || d.month === currentSelectedMonth) &&
+        (currentSelectedDay === "UNKNOWN" || d.day === currentSelectedDay)
     ).forEach(d => {
-        if (d.uniqueRegionName !== 'N/A') {
+        if (d.uniqueRegionName !== 'UNKNOWN') {
             uniqueRegionNames.add(d.uniqueRegionName);
         }
     });
 
-    let regions = Array.from(uniqueRegionNames).filter(r => r !== 'N/A').sort();
+    let regions = Array.from(uniqueRegionNames).filter(r => r !== 'UNKNOWN').sort();
     regions.forEach(r => regionSelect.add(new Option(r, r))); 
 
     let finalSelection = currentSelectedRegion;
     
-    // 【修正点】: 自动选择逻辑
-    if (!uniqueRegionNames.has(currentSelectedRegion) || autoSelect) {
-        if (autoSelect && regions.length > 0) { // 仅在 autoSelect=true 且有数据时自动选择
+    // 自动选择逻辑
+    if (!uniqueRegionNames.has(currentSelectedRegion) || currentSelectedRegion === "UNKNOWN") {
+        if (autoSelect && regions.length > 0) {
             finalSelection = regions[0]; 
         } else {
-            finalSelection = "N/A";
+            finalSelection = "UNKNOWN";
         }
-    } else {
-        finalSelection = currentSelectedRegion;
     }
     
     regionSelect.value = finalSelection; 
@@ -1122,122 +1067,89 @@ function updateRegionOptions(selectedCountry, autoSelect = false) {
 }
 
 // =================================================================
-// === 筛选器事件处理函数 (已修正自动选择逻辑) ===
+// === 筛选器事件处理函数 ===
 // =================================================================
 
 function countryChanged() {
-    // 1. 设置新的国家值
     currentSelectedCountry = countrySelect.value;
     
-    // 2. 重置整个日期系统（因为它依赖于国家/地区）
-    currentSelectedYear = "N/A"; 
-    currentSelectedMonth = "N/A"; 
-    currentSelectedDay = "N/A"; 
+    // 调整顺序：先重置日期，确保地区选项不受旧日期限制。
+    currentSelectedYear = "UNKNOWN"; 
+    currentSelectedMonth = "UNKNOWN"; 
+    currentSelectedDay = "UNKNOWN"; 
     
-    // 仅在选择了具体国家时才自动选择日期
-    const shouldAutoSelect = currentSelectedCountry !== "N/A";
-    updateYearOptions(shouldAutoSelect); 
-
-    // 3. 重置并更新地区
-    currentSelectedRegion = "N/A"; 
-    updateRegionOptions(currentSelectedCountry, shouldAutoSelect); 
+    // 1. 自动选择第一个地区 (现在受新国家和 N/A 日期限制)
+    currentSelectedRegion = "UNKNOWN"; // 重置地区
+    updateRegionOptions(currentSelectedCountry, true); 
+    
+    // 2. 自动选择第一个有效日期 (现在受新国家和新地区的限制)
+    updateYearOptions(true); // 传入 true 自动选择第一个有效年/月/日
     
     filterChanged();
 }
 
 function regionChanged() {
-    // 1. 设置新的地区值
     currentSelectedRegion = regionSelect.value;
     
-    // 2. 重置整个日期系统
-    currentSelectedYear = "N/A"; 
-    currentSelectedMonth = "N/A"; 
-    currentSelectedDay = "N/A"; 
-    
-    // 只要国家或地区有选择，就自动选择日期
-    const shouldAutoSelect = currentSelectedRegion !== "N/A" || currentSelectedCountry !== "N/A";
-    updateYearOptions(shouldAutoSelect); 
+    // 地区改变，重置日期变量并自动选择第一个有效日期
+    currentSelectedYear = "UNKNOWN"; 
+    currentSelectedMonth = "UNKNOWN"; 
+    currentSelectedDay = "UNKNOWN"; 
+    updateYearOptions(true); 
     
     filterChanged();
 }
 
 function yearChanged() {
-    // 1. 设置新的年份值
     currentSelectedYear = yearSelect.value;
     
-    // 检查用户是否选择了 "N/A"
-    const isClearing = currentSelectedYear === "N/A";
-    const shouldAutoSelect = !isClearing; // 如果是清除操作，则不自动选择
+    // 1. 日期级联 (Year -> Month -> Day)
+    currentSelectedMonth = "UNKNOWN"; 
+    currentSelectedDay = "UNKNOWN"; 
+    updateMonthOptions(true); 
 
-    // 2. 日期级联 (Year -> Month -> Day)
-    currentSelectedMonth = "N/A"; 
-    currentSelectedDay = "N/A"; 
-    updateMonthOptions(shouldAutoSelect); 
-
-    // 3. 国家/地区级联 (Date -> Country -> Region)
-    // 重置国家和地区
-    currentSelectedCountry = "N/A"; 
-    currentSelectedRegion = "N/A"; 
-    
-    // 自动选择第一个有效的国家
-    updateCountryFromDate(shouldAutoSelect); 
-    
-    // 更新地区选项
-    updateRegionOptions(currentSelectedCountry, shouldAutoSelect); 
+    // 2. 国家/地区级联 (Date -> Country -> Region)
+    currentSelectedCountry = "UNKNOWN"; 
+    currentSelectedRegion = "UNKNOWN"; 
+    // 防止日期更改自动选择国家
+    updateCountryFromDate(false); 
+    updateRegionOptions(currentSelectedCountry, false); 
 
     filterChanged();
 }
 
 function monthChanged() {
-    // 1. 设置新的月份值
     currentSelectedMonth = monthSelect.value;
     
-    // 检查用户是否选择了 "N/A"
-    const isClearing = currentSelectedMonth === "N/A";
-    const shouldAutoSelect = !isClearing;
+    // 1. 日期级联 (Month -> Day)
+    currentSelectedDay = "UNKNOWN"; 
+    updateDayOptions(true); 
 
-    // 2. 日期级联 (Month -> Day)
-    currentSelectedDay = "N/A"; 
-    updateDayOptions(shouldAutoSelect); 
-
-    // 3. 国家/地区级联 (Date -> Country -> Region)
-    // 重置国家和地区
-    currentSelectedCountry = "N/A"; 
-    currentSelectedRegion = "N/A"; 
-    
-    // 自动选择第一个有效的国家
-    updateCountryFromDate(shouldAutoSelect); 
-    
-    // 更新地区选项
-    updateRegionOptions(currentSelectedCountry, shouldAutoSelect); 
+    // 2. 国家/地区级联 (Date -> Country -> Region)
+    currentSelectedCountry = "UNKNOWN"; 
+    currentSelectedRegion = "UNKNOWN"; 
+    // 防止日期更改自动选择国家
+    updateCountryFromDate(false); 
+    updateRegionOptions(currentSelectedCountry, false); 
 
     filterChanged();
 }
 
 function dayChanged() {
-    // 1. 设置新的日期值
     currentSelectedDay = daySelect.value;
     
-    // 检查用户是否选择了 "N/A"
-    const isClearing = currentSelectedDay === "N/A";
-    const shouldAutoSelect = !isClearing;
-
-    // 2. 国家/地区级联 (Date -> Country -> Region)
-    // 重置国家和地区
-    currentSelectedCountry = "N/A"; 
-    currentSelectedRegion = "N/A"; 
-    
-    // 自动选择第一个有效的国家
-    updateCountryFromDate(shouldAutoSelect); 
-    
-    // 更新地区选项
-    updateRegionOptions(currentSelectedCountry, shouldAutoSelect); 
+    // 国家/地区级联 (Date -> Country -> Region)
+    currentSelectedCountry = "UNKNOWN"; 
+    currentSelectedRegion = "UNKNOWN"; 
+    // 防止日期更改自动选择国家
+    updateCountryFromDate(false); 
+    updateRegionOptions(currentSelectedCountry, false); 
     
     filterChanged();
 }
 
 /**
- * 【新增函数】重置单个筛选器
+ * 重置单个筛选器
  * @param {string} filterType - 要重置的筛选器类型 ('country', 'region', 'year', 'month', 'day')
  */
 function resetSingleFilter(filterType) {
@@ -1245,89 +1157,80 @@ function resetSingleFilter(filterType) {
     
     switch (filterType) {
         case 'country':
-            currentSelectedCountry = "N/A";
-            countrySelect.value = "N/A";
+            currentSelectedCountry = "UNKNOWN";
+            countrySelect.value = "UNKNOWN";
             // 级联重置地区和日期
-            currentSelectedRegion = "N/A";
-            // 重置日期系统，不自动选择
-            currentSelectedYear = "N/A"; 
-            currentSelectedMonth = "N/A"; 
-            currentSelectedDay = "N/A"; 
+            currentSelectedRegion = "UNKNOWN";
+            updateRegionOptions("UNKNOWN", false); 
             updateYearOptions(false); 
-            // 更新地区选项
-            updateRegionOptions("N/A", false); 
             break;
             
         case 'region':
-            currentSelectedRegion = "N/A";
-            regionSelect.value = "N/A";
-            // 重置日期系统，不自动选择
-            currentSelectedYear = "N/A"; 
-            currentSelectedMonth = "N/A"; 
-            currentSelectedDay = "N/A"; 
+            currentSelectedRegion = "UNKNOWN";
+            regionSelect.value = "UNKNOWN";
+            // 重置日期
             updateYearOptions(false);
             break;
             
         case 'year':
-            currentSelectedYear = "N/A";
-            yearSelect.value = "N/A";
+            currentSelectedYear = "UNKNOWN";
+            yearSelect.value = "UNKNOWN";
             // 级联重置月和日
-            currentSelectedMonth = "N/A";
-            currentSelectedDay = "N/A";
+            currentSelectedMonth = "UNKNOWN";
+            currentSelectedDay = "UNKNOWN";
             updateMonthOptions(false); // 这一步会级联到 Day
             // 级联重置国家/地区
-            currentSelectedCountry = "N/A";
-            currentSelectedRegion = "N/A";
-            updateCountryFromDate(false); // 更新国家选项
-            updateRegionOptions("N/A", false); // 更新地区选项
+            currentSelectedCountry = "UNKNOWN";
+            currentSelectedRegion = "UNKNOWN";
+            updateCountryFromDate(false); 
+            updateRegionOptions("UNKNOWN", false); 
             break;
             
         case 'month':
-            currentSelectedMonth = "N/A";
-            monthSelect.value = "N/A";
+            currentSelectedMonth = "UNKNOWN";
+            monthSelect.value = "UNKNOWN";
             // 级联重置日
-            currentSelectedDay = "N/A";
+            currentSelectedDay = "UNKNOWN";
             updateDayOptions(false);
             // 级联重置国家/地区
-            currentSelectedCountry = "N/A";
-            currentSelectedRegion = "N/A";
+            currentSelectedCountry = "UNKNOWN";
+            currentSelectedRegion = "UNKNOWN";
             updateCountryFromDate(false); 
-            updateRegionOptions("N/A", false); 
+            updateRegionOptions("UNKNOWN", false); 
             break;
             
         case 'day':
-            currentSelectedDay = "N/A";
-            daySelect.value = "N/A";
+            currentSelectedDay = "UNKNOWN";
+            daySelect.value = "UNKNOWN";
             // 重置国家/地区
-            currentSelectedCountry = "N/A";
-            currentSelectedRegion = "N/A";
+            currentSelectedCountry = "UNKNOWN";
+            currentSelectedRegion = "UNKNOWN";
             updateCountryFromDate(false); 
-            updateRegionOptions("N/A", false); 
+            updateRegionOptions("UNKNOWN", false); 
             break;
     }
     
     filterChanged();
 }
 
-// 保持此函数用于内部逻辑，例如地图点击重置所有，但移除HTML中的按钮调用
+// 保持此函数用于内部逻辑，例如地图点击重置所有
 function resetFilters() {
-    currentSelectedCountry = "N/A";
-    currentSelectedRegion = "N/A";
-    currentSelectedYear = "N/A";
-    currentSelectedMonth = "N/A";
-    currentSelectedDay = "N/A";
+    currentSelectedCountry = "UNKNOWN";
+    currentSelectedRegion = "UNKNOWN";
+    currentSelectedYear = "UNKNOWN";
+    currentSelectedMonth = "UNKNOWN";
+    currentSelectedDay = "UNKNOWN";
     
-    countrySelect.value = "N/A";
-    regionSelect.value = "N/A";
-    yearSelect.value = "N/A";
-    monthSelect.value = "N/A";
-    daySelect.value = "N/A";
+    countrySelect.value = "UNKNOWN";
+    regionSelect.value = "UNKNOWN";
+    yearSelect.value = "UNKNOWN";
+    monthSelect.value = "UNKNOWN";
+    daySelect.value = "UNKNOWN";
     
     // 重新更新选项，但不自动选择
-    // 只需要调用顶层更新函数，它们会级联
-    updateYearOptions(false); 
-    updateCountryFromDate(false);
     updateRegionOptions(currentSelectedCountry, false);
+    updateYearOptions(false);
+    updateCountryFromDate(false);
     
     filterChanged();
     stopAnimation();
@@ -1339,11 +1242,11 @@ function startAnimation() {
     
     // 只有当至少有一个筛选器被选中且有数据时才允许 DETONATE
     let isSelectionActive = (
-        currentSelectedCountry !== "N/A" || 
-        currentSelectedRegion !== "N/A" || 
-        currentSelectedYear !== "N/A" ||
-        currentSelectedMonth !== "N/A" ||
-        currentSelectedDay !== "N/A"
+        currentSelectedCountry !== "UNKNOWN" || 
+        currentSelectedRegion !== "UNKNOWN" || 
+        currentSelectedYear !== "UNKNOWN" ||
+        currentSelectedMonth !== "UNKNOWN" ||
+        currentSelectedDay !== "UNKNOWN"
     ) && filteredData.length > 0;
     
     if (isSelectionActive && !isDataVisible) {
@@ -1355,13 +1258,13 @@ function startAnimation() {
         shakeMagnitude = maxShakeMagnitude; 
         currentRipplesCount = 0; 
 
-        // 找到最匹配或最大的点作为核心显示点
+        // [重要] 找到当前选定的点作为 selectedMapPoint (与 updateSelectedPoint 逻辑一致)
         selectedMapPoint = filteredData.find(d => 
              d.country === currentSelectedCountry && 
              d.uniqueRegionName === currentSelectedRegion &&
-             (currentSelectedYear === "N/A" || d.year === currentSelectedYear) &&
-             (currentSelectedMonth === "N/A" || d.month === currentSelectedMonth) &&
-             (currentSelectedDay === "N/A" || d.day === currentSelectedDay)
+             (currentSelectedYear === "UNKNOWN" || d.year === currentSelectedYear) &&
+             (currentSelectedMonth === "UNKNOWN" || d.month === currentSelectedMonth) &&
+             (currentSelectedDay === "UNKNOWN" || d.day === currentSelectedDay)
         ) || filteredData[filteredData.length - 1] || null; 
         
         loop(); 
@@ -1387,13 +1290,13 @@ function stopAnimation() {
 function updateSelectedPoint() {
     let filteredData = filterData();
 
-    // 找到最匹配的或最大的点
+    // [重要修正] 尝试找到与所有筛选器完全匹配的点，否则回退到最大当量点
     let selected = filteredData.find(d => 
         d.country === currentSelectedCountry && 
         d.uniqueRegionName === currentSelectedRegion &&
-        (currentSelectedYear === "N/A" || d.year === currentSelectedYear) &&
-        (currentSelectedMonth === "N/A" || d.month === currentSelectedMonth) &&
-        (currentSelectedDay === "N/A" || d.day === currentSelectedDay)
+        (currentSelectedYear === "UNKNOWN" || d.year === currentSelectedYear) &&
+        (currentSelectedMonth === "UNKNOWN" || d.month === currentSelectedMonth) &&
+        (currentSelectedDay === "UNKNOWN" || d.day === currentSelectedDay)
     ) || filteredData[filteredData.length - 1] || null;
     
     selectedMapPoint = selected;
@@ -1411,7 +1314,7 @@ function filterChanged() {
 }
 
 // =================================================================
-// === 地图可视化函数 (与之前版本相同，略) ===
+// === 地图可视化函数 ===
 // =================================================================
 
 function calculateMapDimensions() {
@@ -1467,7 +1370,7 @@ function drawMapVisualization() {
         let isSelected = selectedMapPoint === d;
 
         if (isHovered || isSelected) {
-            dotSize = 20; // *** 修改气泡大小
+            dotSize = 20; 
             strokeAlpha = 0; 
             // ... (省略其他代码) ...
         }
@@ -1479,7 +1382,7 @@ function drawMapVisualization() {
                 radius: 0, 
                 maxRadius: 30, 
                 alpha: 255,
-                waveColor: color(WAVE_R, WAVE_G, WAVE_B, 255), 
+                waveColor: color(WAVE_R, WAVE_G, WAVE_B, 50), 
             });
         }
 
@@ -1493,6 +1396,7 @@ function drawMapVisualization() {
             noStroke(); 
         }
         
+        // 确保 circle 绘制在局部坐标系 (translate(offsetX, offsetY) 之后的坐标系)
         circle(mapX - offsetX, mapY - offsetY, dotSize);
     }
     
@@ -1505,6 +1409,9 @@ function drawMapVisualization() {
     updateAndDrawGlobalRipples();
 }
 
+/**
+ * 修复地图悬停气泡位置
+ */
 function drawHoverInfo(d) {
     const INFO_BOX_WIDTH = 120; 
     const INFO_BOX_HEIGHT = 50; 
@@ -1515,17 +1422,24 @@ function drawHoverInfo(d) {
     let mapX = lonToMapX(d.lon);
     let mapY = latToMapY(d.lat);
     
-    let drawX = mapX - offsetX + X_OFFSET;
-    let drawY = mapY - offsetY + Y_OFFSET;
+    // 1. 获取地图点在【地图局部坐标系】中的位置
+    let mapLocalX = mapX - offsetX; 
+    let mapLocalY = mapY - offsetY;
+    
+    // 2. 根据局部坐标计算气泡的绘制位置
+    let drawX = mapLocalX + X_OFFSET;
+    let drawY = mapLocalY + Y_OFFSET;
 
+    // 边界检查
     if (drawX + INFO_BOX_WIDTH > scaledW) {
-        drawX = mapX - offsetX - INFO_BOX_WIDTH - X_OFFSET;
+        drawX = mapLocalX - INFO_BOX_WIDTH - X_OFFSET;
     }
     if (drawY < 0) {
-        drawY = mapY - offsetY + 10;
+        drawY = mapLocalY + 10;
     }
 
     push();
+    // 3. 在【已平移】到地图左上角的画布中，再次平移到气泡的局部绘制位置
     translate(drawX, drawY);
     
     fill(0, 0, 0, 200);
@@ -1571,6 +1485,9 @@ function updateAndDrawGlobalRipples() {
      pop();
 }
 
+/**
+ * 修复地图点击筛选器更新
+ */
 function mousePressed() {
     let d = dist(mouseX, mouseY, centerX, centerY);
     if (d < coreRadius) {
@@ -1589,23 +1506,34 @@ function mousePressed() {
     if (data.length > 0) {
         let clickedMapPoint = checkMapClick(mouseX, mouseY);
         if (clickedMapPoint) {
-            // 1. 设置国家，重置日期，并自动选择第一个有效日期
+            
+            // 1. 停止动画
+            stopAnimation();
+
+            // 2. 设置新的国家值
             countrySelect.value = clickedMapPoint.country;
             currentSelectedCountry = clickedMapPoint.country;
             
-            // 重置日期
-            currentSelectedYear = "N/A"; 
-            currentSelectedMonth = "N/A"; 
-            currentSelectedDay = "N/A"; 
+            // === 模拟 countryChanged 的级联逻辑 ===
             
-            // 强制自动选择
-            updateYearOptions(true); 
+            // 3. 重置日期
+            currentSelectedYear = "UNKNOWN"; 
+            currentSelectedMonth = "UNKNOWN"; 
+            currentSelectedDay = "UNKNOWN"; 
             
-            // 2. 更新地区选项，并选中地区（依赖于新的国家和日期）
-            updateRegionOptions(clickedMapPoint.country, false); 
+            // 4. 更新地区选项并自动选择第一个地区
+            currentSelectedRegion = "UNKNOWN"; 
+            // 传入 true 自动选择地区列表中的第一个有效地区
+            updateRegionOptions(currentSelectedCountry, true); 
+            
+            // 5. 覆盖地区选择为点击的特定地区
             regionSelect.value = clickedMapPoint.uniqueRegionName;
             currentSelectedRegion = clickedMapPoint.uniqueRegionName;
             
+            // 6. 自动选择第一个有效日期 (受新的国家和特定地区限制)
+            updateYearOptions(true); 
+
+            // 7. 调用 filterChanged 来更新核心显示
             filterChanged(); 
         }
     }
@@ -1624,7 +1552,7 @@ function mouseMoved() {
         // 如果在核心区域，显示小手
         document.getElementById('p5-canvas-container').style.cursor = 'pointer';
     } else if (hoveredPoint) {
-        // 如果在地图气泡上，也显示小手
+        // 如果在地图气泡上，也显示小手（可选，但推荐）
         document.getElementById('p5-canvas-container').style.cursor = 'pointer';
     } else {
         // 否则，恢复默认箭头
@@ -1656,12 +1584,4 @@ function checkMapHover(mx, my) {
 
 function checkMapClick(mx, my) {
     return checkMapHover(mx, my);
-}
-
-function windowResized() {
-    resizeCanvas(windowWidth, windowHeight);
-    maxOuterRadius = min(width, height) / 2 - 40;
-    centerX = width / 2;
-    centerY = height / 2;
-    calculateMapDimensions();
 }
